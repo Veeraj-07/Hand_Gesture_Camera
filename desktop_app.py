@@ -63,6 +63,11 @@ def run_desktop_controller():
     from datetime import datetime
     from hand_gesture import HandGesture
 
+    # Dedicated Photos Directory on Desktop
+    desktop_dir = os.path.join(os.path.expanduser("~"), "Desktop")
+    photo_save_dir = os.path.join(desktop_dir, "Hand_Gesture_Photos")
+    os.makedirs(photo_save_dir, exist_ok=True)
+
     try:
         from pycaw.pycaw import AudioUtilities
         speakers = AudioUtilities.GetSpeakers()
@@ -96,6 +101,7 @@ def run_desktop_controller():
     screen_width, screen_height = pyautogui.size()
 
     print(f"🖥️ Detected Screen Size: {screen_width} x {screen_height}")
+    print(f"📁 Captured Photos Folder: {photo_save_dir}")
     print("🎥 Starting webcam...")
     cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     if not cap.isOpened():
@@ -133,7 +139,7 @@ def run_desktop_controller():
     print("🤏 PINCH (Thumb + Index tip touching): Left Click")
     print("✌️ TWO FINGERS (Index + Middle Up): Volume UP 🔊")
     print("✊ FIST (All 4 fingers curled down): Volume DOWN 🔉")
-    print("👍 THUMBS UP: Takes Photo & Saves directly to your Desktop 📸")
+    print("👍 THUMBS UP: Takes Photo & Saves to 'Desktop/Hand_Gesture_Photos' 📸")
     print("Press 'Q' to quit.")
     print("=" * 75)
 
@@ -172,7 +178,6 @@ def run_desktop_controller():
             pinky_tip = landmarks[20]
             pinky_pip = landmarks[18]
 
-            # Invariant palm size
             palm_size = dist(middle_mcp, wrist)
             if palm_size < 1e-4:
                 palm_size = 0.20
@@ -184,26 +189,24 @@ def run_desktop_controller():
             pinky_extended = dist(pinky_tip, wrist) > dist(pinky_pip, wrist) * 1.05
             thumb_extended = dist(thumb_tip, wrist) > dist(thumb_ip, wrist) * 1.05
 
-            # Pinch: thumb tip and index tip close together
             pinch_dist = dist(thumb_tip, index_tip) / palm_size
             is_pinch = pinch_dist < 0.38
 
             # -----------------------------------------------------------------
-            # 1. THUMBS UP -> TAKE PHOTO & SAVE TO DESKTOP
+            # 1. THUMBS UP -> TAKE PHOTO & SAVE TO DEDICATED FOLDER
             # -----------------------------------------------------------------
             if thumb_extended and thumb_tip.y < wrist.y and not index_extended and not middle_extended and not ring_extended and not pinky_extended:
                 gesture = "THUMBS UP (Photo Capture)"
                 if now - last_capture > capture_delay:
-                    desktop_folder = os.path.join(os.path.expanduser("~"), "Desktop")
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    save_path = os.path.join(desktop_folder, f"hand_photo_{timestamp}.jpg")
+                    save_path = os.path.join(photo_save_dir, f"hand_photo_{timestamp}.jpg")
                     cv2.imwrite(save_path, frame)
                     print(f"\n📸 PHOTO SAVED TO: {save_path}")
                     try:
                         winsound.MessageBeep(winsound.MB_ICONASTERISK)
                     except Exception:
                         pass
-                    notification_text = f"📸 PHOTO SAVED: hand_photo_{timestamp}.jpg"
+                    notification_text = f"📸 PHOTO SAVED TO 'Hand_Gesture_Photos'"
                     notification_timer = now + 2.0
                     last_capture = now
 
@@ -254,8 +257,6 @@ def run_desktop_controller():
             # -----------------------------------------------------------------
             elif index_extended and not middle_extended and not ring_extended and not pinky_extended:
                 gesture = "INDEX POINT (Mouse Cursor 👆)"
-                
-                # Map central 15% - 85% of camera frame to 0% - 100% of Windows screen
                 norm_x = max(0.0, min(1.0, (index_tip.x - 0.15) / 0.70))
                 norm_y = max(0.0, min(1.0, (index_tip.y - 0.15) / 0.70))
 
@@ -274,9 +275,7 @@ def run_desktop_controller():
             elif index_extended and middle_extended and ring_extended and pinky_extended:
                 gesture = "OPEN PALM (Standby ✋)"
 
-        # =====================================================
-        # HUD OVERLAY
-        # =====================================================
+        # HUD Overlay
         cur_vol = get_current_volume()
         cv2.rectangle(frame, (15, 15), (540, 230), (15, 15, 25), -1)
         cv2.rectangle(frame, (15, 15), (540, 230), (0, 255, 130), 2)
@@ -287,13 +286,12 @@ def run_desktop_controller():
         cv2.putText(frame, "🤏 PINCH: Left Click", (30, 140), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (240, 240, 240), 1)
         cv2.putText(frame, "✌️ TWO FINGERS: Volume UP (+)", (30, 165), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (0, 220, 255), 1)
         cv2.putText(frame, "✊ FIST: Volume DOWN (-)", (30, 190), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (0, 220, 255), 1)
-        cv2.putText(frame, "👍 THUMBS UP: Save Photo to Desktop", (30, 215), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (255, 255, 100), 1)
+        cv2.putText(frame, "👍 THUMBS UP: Save to Hand_Gesture_Photos", (30, 215), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (255, 255, 100), 1)
 
-        # Active notification banner
         if now < notification_timer and notification_text:
-            cv2.rectangle(frame, (w // 2 - 250, h - 70), (w // 2 + 250, h - 20), (0, 180, 80), -1)
-            cv2.rectangle(frame, (w // 2 - 250, h - 70), (w // 2 + 250, h - 20), (255, 255, 255), 2)
-            cv2.putText(frame, notification_text, (w // 2 - 230, h - 38), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
+            cv2.rectangle(frame, (w // 2 - 270, h - 70), (w // 2 + 270, h - 20), (0, 180, 80), -1)
+            cv2.rectangle(frame, (w // 2 - 270, h - 70), (w // 2 + 270, h - 20), (255, 255, 255), 2)
+            cv2.putText(frame, notification_text, (w // 2 - 250, h - 38), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (255, 255, 255), 2)
 
         cv2.imshow("Hand Gesture Computer Controller", frame)
 
