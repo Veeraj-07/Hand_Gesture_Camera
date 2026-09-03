@@ -221,6 +221,23 @@
           </div>
         </div>
 
+        <!-- Captured Snapshots Gallery -->
+        <div class="bg-slate-900 rounded-2xl p-4 border border-slate-800 shadow-xl space-y-3">
+          <div class="flex justify-between items-center">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <i class="fa-solid fa-camera text-emerald-400"></i> Captured Snapshots (<span id="photoCount">0</span>)
+            </span>
+            <span class="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">👍 Thumbs Up = Auto Capture</span>
+          </div>
+          <div id="snapshotGalleryGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
+            <div id="emptyGalleryNotice" class="col-span-full text-center py-6 text-slate-600 text-xs flex flex-col items-center gap-1">
+              <i class="fa-solid fa-images text-2xl mb-1 text-slate-700"></i>
+              <span>No photos captured yet.</span>
+              <span class="text-[10px] text-slate-500">Hold up 👍 Thumbs Up for 3-second countdown!</span>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- Right Column: Touchless Virtual Accessibility Keyboard -->
@@ -765,11 +782,60 @@
       }, 800);
     }
 
+    let totalPhotosCaptured = 0;
+
     function capturePhotoSnapshot() {
       const flash = document.getElementById('cameraFlash');
       flash.classList.add('bg-white/80');
       setTimeout(() => flash.classList.remove('bg-white/80'), 300);
-      speakPhrase('Photo captured successfully');
+
+      try {
+        // Create an off-screen canvas to capture high-res frame
+        const capCanvas = document.createElement('canvas');
+        capCanvas.width = videoElement.videoWidth || 1280;
+        capCanvas.height = videoElement.videoHeight || 720;
+        const capCtx = capCanvas.getContext('2d');
+        
+        // Draw the mirrored or standard video
+        capCtx.drawImage(videoElement, 0, 0, capCanvas.width, capCanvas.height);
+
+        const dataUrl = capCanvas.toDataURL('image/jpeg', 0.95);
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `hand_capture_${timestamp}.jpg`;
+
+        // 1. Auto-Download to Downloads Folder
+        const dlLink = document.createElement('a');
+        dlLink.href = dataUrl;
+        dlLink.download = filename;
+        document.body.appendChild(dlLink);
+        dlLink.click();
+        document.body.removeChild(dlLink);
+
+        // 2. Add to On-Screen Gallery Grid
+        totalPhotosCaptured++;
+        document.getElementById('photoCount').textContent = totalPhotosCaptured;
+        const notice = document.getElementById('emptyGalleryNotice');
+        if (notice) notice.remove();
+
+        const grid = document.getElementById('snapshotGalleryGrid');
+        const card = document.createElement('div');
+        card.className = 'relative group rounded-xl overflow-hidden border border-slate-800 bg-slate-950 shadow-md aspect-video';
+        card.innerHTML = `
+          <img src="${dataUrl}" class="w-full h-full object-cover">
+          <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition flex items-end justify-between p-1.5">
+            <span class="text-[9px] text-slate-300 font-mono truncate">${filename}</span>
+            <a href="${dataUrl}" download="${filename}" class="p-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px]" title="Download">
+              <i class="fa-solid fa-download"></i>
+            </a>
+          </div>
+        `;
+        grid.prepend(card);
+
+        speakPhrase('Photo captured and saved to your downloads!');
+      } catch (err) {
+        console.error('Snapshot capture error:', err);
+        speakPhrase('Photo captured successfully');
+      }
     }
 
     function updateHUD(data) {

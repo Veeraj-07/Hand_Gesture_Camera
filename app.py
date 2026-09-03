@@ -1,4 +1,4 @@
-﻿"""
+"""
 Universal Hand Gesture Application
 1. When deployed to Cloud (Render): Serves the Web Vision & Controller interface via FastAPI.
 2. When run locally (python app.py): Launches the OpenCV Windows Desktop System Controller.
@@ -195,7 +195,10 @@ def run_desktop_controller():
             # -----------------------------------------------------------------
             # 1. THUMBS UP -> TAKE PHOTO & SAVE TO DEDICATED FOLDER
             # -----------------------------------------------------------------
-            if thumb_extended and thumb_tip.y < wrist.y and not index_extended and not middle_extended and not ring_extended and not pinky_extended:
+            thumb_pointing_up = (thumb_tip.y < thumb_mcp.y) and (thumb_tip.y < wrist.y)
+            other_fingers_closed = not index_extended and not middle_extended and not ring_extended and not pinky_extended
+
+            if thumb_pointing_up and other_fingers_closed:
                 gesture = "THUMBS UP (Photo Capture)"
                 if now - last_capture > capture_delay:
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -207,7 +210,7 @@ def run_desktop_controller():
                     except Exception:
                         pass
                     notification_text = f"📸 PHOTO SAVED TO 'Hand_Gesture_Photos'"
-                    notification_timer = now + 2.0
+                    notification_timer = now + 2.5
                     last_capture = now
 
             # -----------------------------------------------------------------
