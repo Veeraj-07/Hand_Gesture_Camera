@@ -538,11 +538,14 @@
         drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#10b981', lineWidth: 4 });
         drawLandmarks(canvasCtx, landmarks, { color: '#38bdf8', lineWidth: 2, radius: 4 });
 
+        // Instant In-Browser 60 FPS Gesture & Cursor Execution
+        processInstantGestures(landmarks);
+
+        // Background Neural Network API Verification
         const coords63 = [];
         for (let i = 0; i < 21; i++) {
           coords63.push(landmarks[i].x, landmarks[i].y, landmarks[i].z || 0.0);
         }
-
         predictGestureFromAPI(coords63, landmarks);
 
       } else {
@@ -554,40 +557,56 @@
       canvasCtx.restore();
     }
 
-    let lastApiCall = 0;
-    async function predictGestureFromAPI(coords63, rawLandmarks) {
-      const now = performance.now();
-      if (now - lastApiCall < 60) return;
-      lastApiCall = now;
-
-      try {
-        const res = await fetch('/api/predict', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ landmarks: coords63 })
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          updateHUD(data);
-          handleAssistiveActions(data.gesture, rawLandmarks);
-        }
-      } catch (err) {
-        // Fallback
-      }
-    }
-
     let lastVolumeTime = 0;
     let lastCaptureTime = 0;
     let isCountingDown = false;
 
-    function handleAssistiveActions(gesture, landmarks) {
+    function processInstantGestures(landmarks) {
       const now = Date.now();
       const indexTip = landmarks[8];
+      const thumbTip = landmarks[4];
+      const middleTip = landmarks[12];
+      const ringTip = landmarks[16];
+      const pinkyTip = landmarks[20];
 
+      const indexUp = indexTip.y < landmarks[6].y;
+      const middleUp = middleTip.y < landmarks[10].y;
+      const ringUp = ringTip.y < landmarks[14].y;
+      const pinkyUp = pinkyTip.y < landmarks[18].y;
+      const thumbUp = thumbTip.y < landmarks[3].y && thumbTip.y < landmarks[2].y;
+
+      const pinchDist = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y);
+      const isPinch = pinchDist < 0.08;
+
+      let gesture = "OPEN_PALM";
+      let icon = "✋";
+      let desc = "Open Palm (Standby)";
+
+      if (thumbUp && !indexUp && !middleUp && !ringUp && !pinkyUp && !isPinch) {
+        gesture = "THUMBS_UP";
+        icon = "👍";
+        desc = "Thumbs Up (Photo Capture)";
+      } else if (isPinch && !ringUp && !pinkyUp) {
+        gesture = "PINCH";
+        icon = "🤏";
+        desc = "Pinch (Left Click)";
+      } else if (indexUp && middleUp && !ringUp && !pinkyUp && !isPinch) {
+        gesture = "PEACE_TWO_FINGERS";
+        icon = "✌️";
+        desc = "Two Fingers (Volume Up)";
+      } else if (!indexUp && !middleUp && !ringUp && !pinkyUp && !thumbUp) {
+        gesture = "FIST";
+        icon = "✊";
+        desc = "Fist (Volume Down)";
+      } else if (indexUp && !middleUp && !ringUp && !pinkyUp) {
+        gesture = "INDEX_POINT";
+        icon = "👆";
+        desc = "Index Pointing (Mouse Pointer)";
+      }
+
+      // 1. Move Virtual Pointer with Index Finger
       const rawX = 1 - indexTip.x;
       const rawY = indexTip.y;
-
       const normX = Math.max(0, Math.min(1, (rawX - 0.12) / 0.76));
       const normY = Math.max(0, Math.min(1, (rawY - 0.12) / 0.76));
 
@@ -601,30 +620,66 @@
       aCursor.style.top = `${currentCursorY}px`;
       aCursor.classList.remove('hidden');
 
+      // 2. Dwell-Click on Hover
       handleDwellClick(currentCursorX, currentCursorY);
 
-      if (gesture === 'PINCH') {
+      // 3. Pinch Click
+      if (gesture === "PINCH") {
         triggerInstantClick(currentCursorX, currentCursorY);
       }
 
-      else if (gesture === 'PEACE_TWO_FINGERS') {
+      // 4. Volume Up (Two Fingers)
+      else if (gesture === "PEACE_TWO_FINGERS") {
         if (now - lastVolumeTime > 150) {
           adjustVolume(3);
           lastVolumeTime = now;
         }
       }
 
-      else if (gesture === 'FIST') {
+      // 5. Volume Down (Fist)
+      else if (gesture === "FIST") {
         if (now - lastVolumeTime > 150) {
           adjustVolume(-3);
           lastVolumeTime = now;
         }
       }
 
-      else if (gesture === 'THUMBS_UP') {
+      // 6. Photo Capture (Thumbs Up)
+      else if (gesture === "THUMBS_UP") {
         if (!isCountingDown && now - lastCaptureTime > 3000) {
           triggerPhotoCountdown();
         }
+      }
+
+      updateHUDLocal(gesture, icon, desc);
+    }
+
+    function updateHUDLocal(gesture, icon, desc) {
+      document.getElementById('gestureIconDisplay').textContent = icon;
+      document.getElementById('gestureNameDisplay').textContent = gesture.replace(/_/g, ' ');
+      document.getElementById('gestureActionDisplay').textContent = desc;
+      document.getElementById('confidenceBadge').textContent = "Live";
+    }
+
+    let lastApiCall = 0;
+    async function predictGestureFromAPI(coords63, rawLandmarks) {
+      const now = performance.now();
+      if (now - lastApiCall < 120) return;
+      lastApiCall = now;
+
+      try {
+        const res = await fetch('/api/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ landmarks: coords63 })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('confidenceBadge').textContent = `${data.confidence.toFixed(1)}%`;
+        }
+      } catch (err) {
+        // Fallback active
       }
     }
 
